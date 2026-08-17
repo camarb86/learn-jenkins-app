@@ -3,30 +3,40 @@ pipeline {
 
     stages {
         stage('Build') {
-            aget{
-                docker{
+            agent {
+                docker {
                     image 'node:18-alpine'
                     reuseNode true
                 }
             }
+
             steps {
                 sh '''
-                    la -la
+                    echo "===== Workspace ====="
+                    ls -la
+
+                    echo "===== Node Version ====="
                     node --version
+
+                    echo "===== NPM Version ====="
                     npm --version
+
+                    echo "===== Installing Dependencies ====="
                     npm ci
+
+                    echo "===== Building Application ====="
                     npm run build
+
+                    echo "===== Workspace After Build ====="
                     ls -la
                 '''
             }
         }
-        stage('Test'){
-            steps{
+
+        stage('Test') {
+            steps {
                 echo 'Test Stage'
             }
-
         }
-
     }
-
 }
