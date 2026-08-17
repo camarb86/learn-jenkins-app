@@ -1,42 +1,103 @@
 pipeline {
-    agent any
+  agent any
 
-    stages {
-        stage('Build') {
-            agent {
-                docker {
-                    image 'node:18-alpine'
-                    reuseNode true
-                }
-            }
+  options {
+    // nice-to-have runner options
+    timestamps()
+    ansiColor('xterm')
+    // limits build time if you want: timeout(time: 30, unit: 'MINUTES')
+  }
 
-            steps {
-                sh '''
-                    echo "===== Workspace ====="
-                    ls -la
+  environment {
+    NODE_ENV = 'production'
+  }
 
-                    echo "===== Node Version ====="
-                    node --version
-
-                    echo "===== NPM Version ====="
-                    npm --version
-
-                    echo "===== Installing Dependencies ====="
-                    npm ci
-
-                    echo "===== Building Application ====="
-                    npm run build
-
-                    echo "===== Workspace After Build ====="
-                    ls -la
-                '''
-            }
-        }
-
-        stage('Test') {
-            steps {
-                echo 'Test Stage'
-            }
-        }
+  stages {
+    stage('Prepare') {
+      steps {
+        // keep workspace clean at start
+        deleteDir()
+        checkout scm
+        sh 'ls -la'
+      }
     }
+
+    stage('Install') {
+      agent {
+        docker {
+          image 'node:18-alpine'
+          reuseNode true
+        }
+      }
+      steps {
+        // fail fast, print commands; use npm ci in CI
+        sh '''
+          set -eux
+          node --version
+          npm --version
+          # npm ci is preferred in CI (reproducible install)
+          npm ci --prefer-offline --no-audit --silent
+        '''
+      }
+    }
+
+    stage('Test') {
+      agent {
+        docker {
+          image 'node:18-alpine'
+          reuseNode true
+        }
+      }
+      steps {
+        sh '''
+          set -eux
+          # run your test suite (adjust command if needed)
+          npm test --silent
+        '''
+      }
+      post {
+        // adjust junit path if you generate test reports
+        always {
+          echo 'Test stage finished'
+        }
+      }
+    }
+
+    stage('Build') {
+      agent {
+        docker {
+          image 'node:18-alpine'
+          reuseNode true
+        }
+      }
+      steps {
+        sh '''
+          set -eux
+          npm run build
+          ls -la
+        '''
+      }
+    }
+
+    stage('Archive') {
+      steps {
+        // adjust paths to your build output
+        archiveArtifacts artifacts: 'dist/**, build/**', allowEmptyArchive: true
+      }
+    }
+  }
+
+  post {
+    always {
+      // collect logs, test results, and clean workspace
+      // junit 'test-results/**/*.xml' // uncomment and adjust if you produce JUnit XML
+      cleanWs()
+    }
+    success {
+      echo 'Build succeeded'
+    }
+    failure {
+      echo 'Build failed'
+    }
+  }
 }
